@@ -3,46 +3,94 @@ function help() {
 }
 
 function start() {
-    base_branch="sprint3-multiportal-feature"
-    new_branch=""
+    # Default base branches
+    local default_branches=("main" "staging" "homolog" "sprint3")
+    local sprint3_branches=($(git branch -r | grep 'origin/sprint3-' | sed 's/origin\///'))
+    local all_base_branches=("${default_branches[@]}" "${sprint3_branches[@]}")
     
+    local base_branch=""
+    local new_branch=""
+    local interactive_mode=false
+
     # Parse arguments
-    TEMP=`getopt --long -o "b:f:h" "$@"`
+    TEMP=$(getopt -o "b:f:hi" --long "branch:,from:,help,interactive" -n 'start' -- "$@")
+    
+    if [ $? != 0 ] ; then echo "Terminating..." >&2 ; return 1 ; fi
+    
     eval set -- "$TEMP"
     
     while true ; do
         case "$1" in
-            -b )
-                new_branch=$2
+            -b|--branch)
+                new_branch="$2"
                 shift 2
-            ;;
-            -f )
-                base_branch=$2
+                ;;
+            -f|--from)
+                # Trim whitespace from base_branch
+                base_branch=$(echo "$2" | xargs)
                 shift 2
-            ;;
-            -h )
-                echo "Uso: start -b <nova_branch> [-f <branch_base>]"
-                echo "  -b : Nome da nova branch"
-                echo "  -f : Branch base (padrão: sprint3-multiportal-feature)"
-                return 1
-            ;;
-            *)
+                ;;
+            -h|--help)
+                echo "Uso: start [-b <nova_branch>] [-f <branch_base>] [-i]"
+                echo "  -b, --branch  : Nome da nova branch"
+                echo "  -f, --from    : Branch base (padrão: sprint3-multiportal-feature)"
+                echo "  -i, --interactive : Modo interativo para seleção de branch"
+                return 0
+                ;;
+            -i|--interactive)
+                interactive_mode=true
+                shift
+                ;;
+            --)
+                shift
                 break
-            ;;
+                ;;
+            *)
+                echo "Erro interno"
+                return 1
+                ;;
         esac
-    done;
+    done
 
-    # Validar se o nome da branch foi fornecido
+    # Interactive mode for branch selection if no base branch specified
+    if [[ "$interactive_mode" == true || -z "$base_branch" ]]; then
+        base_branch=$(printf '%s\n' "${all_base_branches[@]}" | fzf \
+            --preview='git log -n 5 --pretty=format:"%h %s" origin/{}' \
+            --preview-window=right:60% \
+            --height=70% \
+            --layout=reverse \
+            --info=hidden \
+            --header="Selecione a branch base" | xargs)
+        
+        # Exit if no branch selected
+        if [[ -z "$base_branch" ]]; then
+            echo "[ERROR] Nenhuma branch base selecionada"
+            return 1
+        fi
+    fi
+
+    # Default to sprint3-multiportal-feature if no base branch specified
+    base_branch=${base_branch:-"sprint3-multiportal-feature"}
+
+    # Interactive or manual branch name input
     if [[ -z "$new_branch" ]]; then
-        echo "[ERROR] Nome da branch não especificado"
+        read -p "Nome da nova branch (exemplo: sprint3-feature-name): " new_branch
+    fi
+
+    # Validate branch name
+    if [[ -z "$new_branch" ]]; then
+        echo "[ERROR] Nome da branch não pode ser vazio"
         return 1
     fi
 
-    # Criar e mudar para a nova branch
+    new_branch="${new_branch}"
+
+    # Create and checkout the new branch
     git checkout -b "$new_branch" "$base_branch"
     
     if [[ $? -eq 0 ]]; then
         echo "Branch '$new_branch' criada a partir de '$base_branch'"
+        return 0
     else
         echo "[ERROR] Não foi possível criar a branch"
         return 1
@@ -98,9 +146,13 @@ function merge() {
     done;
 
     # Validate identifier and type
-    if [[ $identifier == "${identifier_type}-XXXX" ]]; then 
-        error_message+="[ERROR] Nenhum número de ${identifier_type} informado\n"
-    fi 
+    if [[ "$identifier_type" == "COR" && ! "$identifier" =~ ^COR-([0-9]+(-[0-9]+)*)$ ]]; then
+        error_message+="[ERROR] O número do COR (COR-XXXX) é obrigatório e deve ser numérico\n"
+    elif [[ "$identifier_type" == "IMP" && ! "$identifier" =~ ^IMP-([0-9]+(-[0-9]+)*)$ ]]; then
+        error_message+="[ERROR] O número do IMPEDIMENTO (IMP-XXXX) é obrigatório e deve ser numérico\n"
+    elif [[ "$identifier_type" == "CONFLITS" && "$identifier" != "" ]]; then
+        error_message+="[ERROR] Para CONFLITS não deve ser fornecido número\n"
+    fi
 
     if [[ $desc == "" ]]; then 
         error_message+="[ERROR] Nenhuma descrição informada\n"
@@ -127,16 +179,16 @@ function merge() {
         echo "Pull Request criada com sucesso: ${pr_url}"
         
         pr_title="[${identifier_type}-${identifier}] ${desc}"
+        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+") # Obtém o número da PR a partir da URL
         
         # Use full path to the script
-        webhook_response=$(go run ~/send_slack_message.go "${pr_url}" "${pr_title}")
+        webhook_response=$(go run ~/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
         
         echo "$webhook_response"
     else
         echo "[ERROR] Não foi possível criar a Pull Request."
     fi
 }
-
 
 function up() {
     branch="sprint3-multiportal-feature"
@@ -414,6 +466,14 @@ EOF
     get_command_options() {
         local cmd=$1
         case $cmd in
+            "start")
+            base_branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf)
+            
+            if [[ -n "$base_branch" ]]; then
+                read -p "Nome da nova branch (exemplo: sprint3-feature-name): " branch_name
+                echo "-f '$base_branch' -b '$branch_name'"
+            fi
+            ;;
             "commit")
                 selected_type=$(get_commit_types | fzf \
                     --preview='echo {} | cut -d: -f1 | xargs -I{} bash -c "\
@@ -468,6 +528,7 @@ EOF
         --layout=reverse \
         --info=hidden \
         --header="Selecione um comando":
+start
 commit
 merge
 up
