@@ -1,0 +1,757 @@
+#!/bin/bash
+
+####################################################Helper functions####################################################
+printMessage() {
+    local color=$1
+    local message=$2
+    echo -e "\e[${color}m${message}\e[0m"
+}
+
+commandExists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+sourceShellConfig() {
+    local shell_config=""
+    if [ -n "$BASH_VERSION" ]; then
+        shell_config=~/.bashrc
+    elif [ -n "$ZSH_VERSION" ]; then
+        shell_config=~/.zshrc
+    else
+        echo "Unsupported shell: $SHELL"
+        exit 1
+    fi
+
+    source $shell_config
+    printMessage "33" "Terminal session reloaded using $shell_config."
+}
+
+ask() {
+    while true; do
+        read -p "$(printMessage "33" "$1 (y/n): ")" response
+        case $response in
+        [Yy]*) return 0 ;;
+        [Nn]*) return 1 ;;
+        *) printMessage "31" "Please answer y or n." ;;
+        esac
+    done
+}
+
+####################################################Main Functions####################################################
+preConfigurationManager() {
+    sourceShellConfig
+    validateGitEnvironment
+    validateDockerEnvironment
+    validateGolang
+    sourceShellConfig
+}
+
+validateGitEnvironment() {
+    validateGit
+    configureGit
+}
+
+validateGit() {
+    if ! commandExists git; then
+        printMessage "31" "Git is not installed. Installing Git..."
+        sudo apt update
+        sudo apt install git -y
+        sourceShellConfig
+
+        if commandExists git; then
+            printMessage "32" "Git installed successfully."
+        else
+            printMessage "31" "Failed to install Git. Please install Git manually and rerun the script."
+            exit 1
+        fi
+    else
+        printMessage "32" "Git already installed."
+    fi
+}
+
+configureGit() {
+    sudo apt install xclip -y
+
+    if ! checkSshKey; then
+        gitPromptForInput
+        generateSshKey
+    fi
+
+    printMessage "32" "Git is already configured."
+}
+
+checkSshKey() {
+    if [ -f ~/.ssh/id_ed25519.pub ]; then
+        printMessage "32" "SSH key is already configured:"
+        cat ~/.ssh/id_ed25519.pub
+        return 0
+    fi
+    return 1
+}
+
+gitPromptForInput() {
+    read -p "Enter your email address: " user_email
+    read -p "Enter your name: " user_name
+}
+
+generateSshKey() {
+    if checkSshKey; then
+        return
+    fi
+
+    printMessage "34" "Generating SSH key..."
+    ssh-keygen -t ed25519 -C "$user_email" -f ~/.ssh/id_ed25519 -N ""
+
+    git config --global gpg.format ssh
+    git config --global user.signingkey ~/.ssh/id_ed25519
+    git config --global commit.gpgsign true
+
+    printMessage "34" "SSH key generated successfully. Here is your public key:"
+    public_key=$(cat ~/.ssh/id_ed25519.pub)
+    echo "$public_key"
+    echo "$public_key" | xclip -selection clipboard
+
+    echo ""
+    printMessage "33" "Please copy the above SSH key and add it to your GitHub account under 'SSH and GPG keys'."
+    printMessage "36" "Link: https://github.com/settings/keys"
+    echo ""
+
+    ask "Have you configured the SSH key on GitHub as Authentication Key?"
+    if [ $? -ne 0 ]; then
+        printMessage "31" "SSH key not configured as Authentication Key on GitHub. Please configure and rerun the script."
+        exit 1
+    fi
+
+    ask "Have you configured the SSH key on GitHub as Signin Key?"
+    if [ $? -ne 0 ]; then
+        printMessage "31" "SSH key not configured as Signin Key on GitHub. Please configure and rerun the script."
+        exit 1
+    fi
+}
+
+validateDockerEnvironment() {
+    if ! commandExists docker && ! commandExists docker-compose; then
+        printMessage "31" "Docker is not installed. Installing Docker and Docker Compose..."
+
+        sudo apt update
+        sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        sudo apt update
+        sudo apt install -y docker-ce docker-ce-cli containerd.io
+        sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        sudo usermod -aG docker $USER
+
+        sourceShellConfig
+
+        if commandExists docker; then
+            printMessage "32" "Docker installed successfully."
+
+            printMessage "34" "The system will be rebooted automatically now to continue the script."
+            printMessage "34" "After reboot, run the script again to complete installation."
+            sleep 5
+            sudo shutdown -r now
+        else
+            printMessage "31" "Failed to install Docker. Please install Docker manually and rerun the script."
+            exit 1
+        fi
+    else
+        printMessage "32" "Docker already installed."
+        printMessage "32" "Docker Compose already installed."
+    fi
+}
+
+validateGolang() {
+    if [ $iSimulador -ne 1 ] || [ $iMass -ne 1 ]; then
+        return
+    fi
+
+    if ! commandExists go; then
+        printMessage "31" "Go is not installed. Installing Go..."
+        updateGolang
+        sourceShellConfig
+
+        if commandExists go; then
+            printMessage "32" "Go installed successfully."
+        else
+            printMessage "31" "Failed to install Go. Please install Go manually and rerun the script."
+            exit 1
+        fi
+    else
+        printMessage "32" "Golang already installed."
+    fi
+}
+
+updateGolang() {
+    read -p "Enter the Go tarball file name (e.g., go1.17.5.linux-amd64.tar.gz): " go_tarball
+
+    if [ -z "$go_tarball" ]; then
+        printMessage "31" "Go tarball file name cannot be empty."
+        return 1
+    fi
+
+    sudo apt remove golang-go &&
+        sudo apt remove --auto-remove golang-go &&
+        sudo rm -rf /usr/local/go &&
+        wget "https://go.dev/dl/$go_tarball" &&
+        sudo tar -C /usr/local -xzf "$go_tarball"
+    rm -Rf $go_tarball
+
+    user_shell=$(basename "$SHELL")
+    if [ "$user_shell" = "zsh" ]; then
+        config_file="$HOME/.zshrc"
+    else
+        config_file="$HOME/.bashrc"
+    fi
+
+    printMessage "33" "Updating $config_file with Go configurations..."
+
+    cat <<EOF >>"$config_file"
+
+# Golang Configurations
+export GOROOT=/usr/local/go
+export GOPATH=\$HOME/go
+export PATH=\$GOPATH/bin:\$GOROOT/bin:\$PATH
+EOF
+
+    printMessage "32" "Go configurations have been added to $config_file."
+    sourceShellConfig
+}
+
+defineRepositoriesAndFolders() {
+    case $1 in
+    "wallet")
+        repositories=(
+            "wallet.em.cash"
+            "controle.em.cash"
+            "parceiro.em.cash"
+        )
+
+        folders=(
+            "wallet.em.cash"
+            "wallet.em.cash/controle.em.cash"
+            "wallet.em.cash/parceiro.em.cash"
+        )
+        ;;
+    "mass")
+        repositories=(
+            "wallet.em.cash"
+            "controle.em.cash"
+            "parceiro.em.cash"
+            "mass.em.cash"
+        )
+
+        folders=(
+            "wallet.em.cash"
+            "wallet.em.cash/controle.em.cash"
+            "wallet.em.cash/parceiro.em.cash"
+            "wallet.em.cash/mass.em.cash"
+        )
+        ;;
+    "simulador")
+        repositories=(
+            "wallet.em.cash"
+            "controle.em.cash"
+            "parceiro.em.cash"
+            "simulador.em.cash"
+            "simulador-front.em.cash"
+        )
+
+        folders=(
+            "wallet.em.cash"
+            "wallet.em.cash/controle.em.cash"
+            "wallet.em.cash/parceiro.em.cash"
+            "wallet.em.cash/simulador.em.cash"
+            "wallet.em.cash/simulador-front.em.cash"
+        )
+        ;;
+    *)
+        echo "Unknown project type: $1"
+        return 1
+        ;;
+    esac
+}
+
+cloneRepositories() {
+    printMessage "34" "\nCloning repositories..."
+
+    for ((i = 0; i < ${#repositories[@]}; i++)); do
+        clone_repo "git@github.com:emcash-team/${repositories[$i]}.git" "${folders[$i]}"
+    done
+
+    changeBranchesToHomolog
+
+    printMessage "32" "\nAll repositories clonned successfully!"
+}
+
+clone_repo() {
+    local repo=$1
+    local folder=$2
+
+    if [ -d "$folder" ]; then
+        printMessage "33" "Folder $folder already exists. Skipping..."
+    else
+        if checkRepoAccess "$repo"; then
+            printMessage "32" "\nCloning $repo into $folder..."
+            mkdir -p "$folder"
+            git clone "$repo" "$folder"
+        else
+            printMessage "31" "\nYou do not have access to $repo. Please check your access permissions."
+            exit 1
+        fi
+    fi
+
+}
+
+checkRepoAccess() {
+    local repo=$1
+    if git ls-remote "$repo" &>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+changeBranchesToHomolog() {
+    for ((i = 0; i < ${#repositories[@]}; i++)); do
+        cd ./"${repositories[$i]}"
+
+        printMessage "36" "\nUpdating ${repositories[$i]} repository to homolog branch."
+
+        git checkout homolog
+        if [ "${repositories[$i]}" != "wallet.em.cash" ]; then
+            cd ..
+        fi
+
+        printMessage "32" "${repositories[$i]} updated."
+    done
+}
+
+checkEnvWallet() {
+    buildWalletEnvFiles
+
+    if grep -q "'sendgridKey' => 'sendgrid-key'," ./config/params.php; then
+        while true; do
+            printMessage "33" "\nPlease set a new params.php with valid parameters on wallet.em.cash/config folder."
+            read -p "Press any key to check the params.php file..."
+
+            if grep -q "'sendgridKey' => 'sendgrid-key'," ./config/params.php; then
+                printMessage "31" "Wallet params.php is not correctly configured. Please try again."
+            else
+                printMessage "32" "Wallet params correctly configured."
+                break
+            fi
+        done
+    else
+        printMessage "32" "Wallet params correctly configured."
+    fi
+
+}
+
+buildWalletEnvFiles() {
+    cp config/params.php.dist config/params.php
+
+    cd controle.em.cash
+    cp config/params.php.dist config/params.php
+
+    cd ../parceiro.em.cash
+    cp config/params.php.dist config/params.php
+
+    cd ..
+}
+
+checkEnvMass() {
+    cd ./mass.em.cash
+    cp env.dist .env
+    printMessage "32" ".env file created from .env.dist in mass.em.cash."
+    cd ..
+}
+
+checkEnvSimulador() {
+    validateWalletSimulatorParams
+    cd ./simulador.em.cash
+    cp .env.dist .env
+
+    validateSimulatorParams
+    cd ..
+}
+
+validateWalletSimulatorParams() {
+    if checkWalletSimulatorParamsFile; then
+        printMessage "32" "Wallet for Simulator params correctly configured."
+    else
+        while true; do
+            printMessage "33" "\nPlease set a new params.php with the simulador parameters in the wallet.em.cash/config folder."
+            read -p "Press any key to check the params.php file..."
+
+            if checkWalletSimulatorParamsFile; then
+                printMessage "32" "Wallet for Simulator params correctly configured."
+                break
+            else
+                printMessage "31" "Wallet for Simulator params.php is not correctly configured. Please try again."
+            fi
+        done
+    fi
+}
+
+checkWalletSimulatorParamsFile() {
+    grep -q "'simuladorHost' => 'http://simulador_api:8089'," ./config/params.php &&
+        grep -q "'simuladorUsername' => 'starlingtempemcash@mailinator.com'," ./config/params.php &&
+        grep -q "'simuladorPassword' => 'Emcash@1234'," ./config/params.php
+}
+
+validateSimulatorParams() {
+    if grep -q "AWS_REGION=Foo" ./.env; then
+        while true; do
+            printMessage "33" "\nPlease set a new .env with valid params on simulador.em.cash/.env."
+            echo "Press any key to check the .env file..."
+            read -r _
+
+            if grep -q "AWS_REGION=Foo" ./.env; then
+                printMessage "31" "Simulator .env file is not correctly configured. Please try again."
+            else
+                printMessage "32" "Simulator .env correctly configured."
+                break
+            fi
+        done
+    else
+        printMessage "32" "Simulator .env correctly configured."
+    fi
+}
+
+checkEnvSimuladorFront() {
+    cd ./simulador-front.em.cash
+    cp .env.dist .env
+    printMessage "32" ".env file created from .env.dist in simulador-front.em.cash."
+    cd ..
+}
+
+configGithubClassicToken() {
+    cd ./simulador-front.em.cash
+
+    if [ -f .npmrc ]; then
+        if grep -q "{{SEU_TOKEN}}" .npmrc; then
+            printMessage "36" ".npmrc already has a GitHub personal access token."
+        else
+            update_npmrc_with_token
+        fi
+    else
+        echo ".npmrc file does not exist. Creating one with the GitHub personal access token."
+        update_npmrc_with_token
+    fi
+
+    cd ..
+}
+
+update_npmrc_with_token() {
+    printMessage "33" "\nPlease generate a new GitHub personal access token (classic) using the link below:"
+    printMessage "36" "Link: https://github.com/settings/tokens/new"
+    read -p "Please enter your GitHub personal access token (classic): " github_token
+
+    cp .npmrc.dist .npmrc
+    sed -i "s/{{SEU_TOKEN}}/${github_token}/g" .npmrc
+
+    printMessage "32" ".npmrc file updated with the GitHub personal access token."
+}
+
+dockerManager() {
+    printMessage "34" "\nConfiguring wallet project..."
+    dockerComposeFile=./docker-compose.yml
+
+    if [ ! -f "$dockerComposeFile" ]; then
+        cp ./docker-compose.dist.yml $dockerComposeFile
+        sed -i '/capital:/,/command: ash -c "npm install && npm start"/ s/^/#/' $dockerComposeFile
+        sed -i '/  app:/,/command: ash -c "npm install && npm start"/ s/^/#/' $dockerComposeFile
+        sed -i '/  swagger:/,/- api/ s/^/#/' $dockerComposeFile
+    fi
+
+    containerManager
+
+    docker compose stop
+    simuladorFrontNodeFolder
+
+    printMessage "34" "\nStarting Docker containers..."
+    waitForDocker "$dockerComposeFile"
+
+}
+
+containerManager() {
+    if [ $iMass -eq 1 ] && [ $iSimulador -eq 1 ]; then
+        if [ $currentProject == "simulador" ]; then
+            sed -i '/  mass:/,/      - api/ s/^/#/' $dockerComposeFile
+        else
+            sed -i '/  mass:/,/      - api/ s/^#//' $dockerComposeFile
+        fi
+    else
+        if [ $iSimulador -eq 1 ]; then
+            sed -i '/  mass:/,/      - api/ s/^/#/' $dockerComposeFile
+        fi
+
+        if [ $iMass -eq 1 ]; then
+            sed -i '/simulador_api:/,/      - "3002:3000"/ s/^/#/' $dockerComposeFile
+        fi
+    fi
+}
+
+simuladorFrontNodeFolder() {
+    if [ $iSimulador -ne 1 ]; then
+        return
+    fi
+
+    cd ./simulador-front.em.cash
+    sudo rm -Rf node_modules
+    cd ..
+}
+
+waitForDocker() {
+    local compose_file=$1
+    docker compose -f "$compose_file" up -d
+    while ! docker compose -f "$compose_file" ps | grep " Up "; do
+        printMessage "33" "Waiting for Docker containers to start..."
+        sleep 5
+    done
+}
+
+projectsConfig() {
+    printMessage "34" "\nRunning configuration scripts..."
+
+    cp config/params.php.dist config/params.php &&
+        docker exec emcash_api composer install &&
+        chmod 777 runtime infra/docs &&
+        printMessage "32" "Wallet Configured.\n"
+
+    cd controle.em.cash &&
+        cp config/params.php.dist config/params.php &&
+        docker exec emcash_controle composer install &&
+        chmod 777 runtime web/assets &&
+        printMessage "32" "Controle Configured.\n"
+
+    cd ../parceiro.em.cash &&
+        cp config/params.php.dist config/params.php &&
+        docker exec emcash_parceiro composer install &&
+        chmod 777 runtime web/assets &&
+        printMessage "32" "Parceiro Configured.\n"
+    cd ..
+}
+
+buildAndRunDocker() {
+    printMessage "34" "Starting Docker containers..."
+    docker compose up --build -d
+    waitForDocker "./docker-compose.yml"
+
+    printMessage "34" "\nInitializating docker containers..."
+
+    loading_progress 30
+
+    printMessage "32" "Docker containers working correctly..."
+}
+
+function loading_progress() {
+    local duration=$1
+    local steps=50
+    local interval=$(echo "scale=2; $duration / $steps" | bc)
+
+    local green='\033[0;32m'
+    local cyan='\033[0;36m'
+    local reset='\033[0m'
+
+    for ((i = 0; i <= steps; i++)); do
+        percentage=$(echo "scale=2; $i * 100 / $steps" | bc)
+
+        fill=$(echo "scale=0; $i * $steps / 100" | bc)
+        remaining=$((steps - fill))
+
+        echo -ne "Progress: ["
+        printf "${green}"
+        printf '%.0s=' $(seq 1 $fill)
+        printf "${cyan}"
+        printf '%.0s' $(seq 1 $remaining)
+        printf "${reset}"
+        echo -ne "] $percentage% \r"
+
+        sleep $interval
+    done
+
+    echo -ne "\n"
+}
+
+migrateDb() {
+    walletDb
+    simuladorDb
+
+    cd ..
+}
+
+walletDb() {
+    if [ -n "$walletDbRunned" ]; then
+        return
+    fi
+
+    PASSWORD=admin
+
+    printMessage "34" "\nCreating and seeding the Wallet database..."
+    docker ps -a | grep emcash_db
+    docker exec -i emcash_db mysql -u root -p$PASSWORD <db-fixtures/dbapp.sql
+    docker exec -i emcash_db mysql -u root -p$PASSWORD <db-fixtures/fixtures.sql
+    docker exec -i emcash_api sed -i 's/\r$//' ./yii
+    docker exec -i emcash_api ./yii migrate --interactive=0
+    docker exec -i emcash_db mariadb -u root -p$PASSWORD <db-fixtures/pos-fixtures.sql
+    docker exec emcash_api find /opt/docs -type f -name "*" -exec rm -f {} \;
+    docker exec emcash_api find /opt/mails -type f -name "*" -exec rm -f {} \;
+    docker exec emcash_api find /opt/sms -type f -name "*" -exec rm -f {} \;
+    docker exec emcash_parceiro find /opt/mails -type f -name "*" -exec rm -f {} \;
+    walletDbRunned=true
+
+    printMessage "32" "Wallet database created successfuly."
+}
+
+simuladorDb() {
+    if [ $iSimulador -ne 1 ] || [ -n "$simuladorDbRunned" ]; then
+        return
+    fi
+
+    PASSWORD=admin
+
+    printMessage "34" "\nCreating and seeding the Multiportal database..."
+    cd ./simulador.em.cash/infra/database
+    docker exec -i emcash_db mariadb -u root -p$PASSWORD -D dbapp <db-fixtures/pre-fixtures.sql
+    docker exec -i emcash_simulador migrate -path ./infra/database/migrations/mariaDB -database "mysql://root:$PASSWORD@tcp(emcash_db)/dbsimulador" down
+    docker exec -i emcash_simulador migrate -path ./infra/database/migrations/mariaDB -database "mysql://root:$PASSWORD@tcp(emcash_db)/dbsimulador" up
+    docker exec -i emcash_db mariadb -u root -p$PASSWORD -D dbsimulador <db-fixtures/fixtures.sql
+    simuladorDbRunned=true
+    
+    printMessage "32" "Multiportal database created successfuly."
+    
+    cd ../../../
+}
+
+####################################################Refactored Functions####################################################
+
+projectQuestions() {
+    iSimulador=0
+    iMass=0
+    iWallet=0
+
+    ask_installation "Simulador Project (Simulador Back, Simulador Front)" "iSimulador"
+    ask_installation "Mass Project (Mass)" "iMass"
+
+    if [ $iSimulador -eq 1 ] || [ $iMass -eq 1 ]; then
+        iWallet=1
+    fi
+
+    if [ $iWallet -eq 0 ]; then
+        ask_installation "Wallet Project (Wallet, Controle, Parceiro)" "iWallet"
+    fi
+
+    validateQuestions
+}
+
+ask_installation() {
+    local project_name="$1"
+    local var_name="$2"
+    local response
+
+    while true; do
+        read -p "Do you want to install $project_name? (y/n): " response
+        case "$response" in
+        [yY] | [yY][eE][sS])
+            eval "$var_name=1"
+            break
+            ;;
+        [nN] | [nN][oO])
+            eval "$var_name=0"
+            break
+            ;;
+        *)
+            printMessage "33" "Please enter y or n."
+            ;;
+        esac
+    done
+}
+
+validateQuestions() {
+    if [ $iWallet -eq 0 ]; then
+        printMessage "36" "Any project selected to install :(. Please rerun the script."
+        exit 1
+    fi
+}
+
+walletConfiguration() {
+    if [ $iMass -eq 1 ] || [ $iSimulador -eq 1 ]; then
+        return
+    fi
+
+    printMessage "36" "Configuring Wallet project..."
+
+    currentProject="wallet"
+
+    defineRepositoriesAndFolders $currentProject
+    cloneRepositories
+    checkEnvWallet
+    checkEnvSimulador
+    checkEnvSimuladorFront
+    dockerManager
+    projectsConfig
+    buildAndRunDocker
+    migrateDb
+}
+
+massConfiguration() {
+    if [ $iMass -ne 1 ]; then
+        return
+    fi
+
+    printMessage "36" "Configuring Mass project..."
+
+    currentProject="mass"
+
+    defineRepositoriesAndFolders $currentProject
+    cloneRepositories
+    checkEnvWallet
+    checkEnvMass
+    dockerManager
+    projectsConfig
+    buildAndRunDocker
+    migrateDb
+}
+
+simulatorConfiguration() {
+    if [ $iSimulador -ne 1 ]; then
+        return
+    fi
+
+    printMessage "36" "Configuring Simulator project..."
+
+    currentProject="simulador"
+
+    defineRepositoriesAndFolders $currentProject
+    cloneRepositories
+    checkEnvWallet
+    checkEnvSimulador
+    checkEnvSimuladorFront
+    configGithubClassicToken
+    dockerManager
+    projectsConfig
+    buildAndRunDocker
+    migrateDb
+}
+
+initSetupBrunow() {
+        
+    printMessage "34" "Starting Emcash development environment setup process..."
+    currentProject=""
+
+    projectQuestions
+    preConfigurationManager
+    walletConfiguration
+    simulatorConfiguration
+    massConfiguration
+
+    printMessage "32" "Process completed. Restarting Docker Containers!"
+
+    cd ./wallet.em.cash
+    docker compose stop
+    docker compose up
+
+}

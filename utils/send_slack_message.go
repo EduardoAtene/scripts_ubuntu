@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -66,19 +68,17 @@ func getUserName() string {
 
 func sendSlackMessage(prURL string, prTitle string, prNumberPr string, config *Config) error {
 	author := fmt.Sprintf("<@%s>", config.SlackUserID)
-	groupApprovers := fmt.Sprintf("<@%s>", config.GroupApprovers)
+	groupApprovers := fmt.Sprintf("<!subteam^%s>", config.GroupApprovers)
 
-	titleWithLink := fmt.Sprintf("<%s|%s> %s", prURL, prTitle, prNumberPr)
+	projectName := getProjectNameFromURL(prURL)
+	titleWithLink := fmt.Sprintf("<%s|%s> #%s", prURL, prTitle, prNumberPr)
 
-	// Adaptar Project Number
 	messageText := fmt.Sprintf(
-		`:rocket: *Nova Pull Request Criada - * 
-
-	*👤 Autor:* %s
-	*🏷️ Título:* %s
-	*👥 Aprovadores:* %s
+		`:rocket: *PR Criada - %s - %s* 
+*🏷️ Título:* %s
+*👥 Aprovadores:* %s
 		`,
-		author, titleWithLink, groupApprovers,
+		author, projectName, titleWithLink, groupApprovers,
 	)
 
 	message := SlackMessage{
@@ -99,7 +99,8 @@ func sendSlackMessage(prURL string, prTitle string, prNumberPr string, config *C
 	}
 
 	jsonData, err := json.Marshal(message)
-	// fmt.Println(string(jsonData))
+	fmt.Println(string(jsonData))
+	fmt.Printf("urlWebhook: %s\n", config.WebhookURL)
 
 	if err != nil {
 		return fmt.Errorf("erro ao converter mensagem para JSON: %w", err)
@@ -128,8 +129,13 @@ func main() {
 	prTitle := os.Args[2]
 	prNumberPr := os.Args[3]
 
-	// Carregar a configuração usando o caminho absoluto
-	config, err := loadConfig("./env/config.json")
+	// Carregar a configuração com caminho relativo ao diretório do arquivo atual
+	_, currentFilePath, _, _ := runtime.Caller(0)
+	currentDir := filepath.Dir(currentFilePath)
+	configPath := filepath.Join(currentDir, "../env/config.json")
+
+	// Carregar a configuração usando o caminho calculado
+	config, err := loadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Erro ao carregar configuração: %s\n", err)
 		os.Exit(1)
@@ -142,4 +148,17 @@ func main() {
 	}
 
 	fmt.Println("Mensagem enviada ao Slack com sucesso.")
+}
+
+func getProjectNameFromURL(url string) string {
+	switch {
+	case strings.Contains(url, "360-api"):
+		return "Portal 360°"
+	case strings.Contains(url, "wallet.em.cash"):
+		return "Wallet"
+	case strings.Contains(url, "controle.em.cash"):
+		return "Controle"
+	default:
+		return "-"
+	}
 }

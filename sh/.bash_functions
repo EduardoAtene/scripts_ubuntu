@@ -3,7 +3,7 @@ function help() {
 }
 
 function start() {
-    # Default base branches
+    # Branchs default que usamos
     local default_branches=("main" "staging" "homolog" "sprint3")
     local sprint3_branches=($(git branch -r | grep 'origin/sprint3-' | sed 's/origin\///'))
     local all_base_branches=("${default_branches[@]}" "${sprint3_branches[@]}")
@@ -69,6 +69,14 @@ function start() {
         fi
     fi
 
+    # Validate base branch exists in remote
+    if ! git ls-remote --exit-code --heads origin "$base_branch" > /dev/null 2>&1; then
+        echo "[ERROR] Branch base '$base_branch' não existe no repositório remoto"
+        echo "Branches disponíveis:"
+        git branch -r | grep -v '\->'
+        return 1
+    fi
+
     # Default to sprint3-multiportal-feature if no base branch specified
     base_branch=${base_branch:-"sprint3-multiportal-feature"}
 
@@ -83,10 +91,14 @@ function start() {
         return 1
     fi
 
-    new_branch="${new_branch}"
+    # Prefix branch name with sprint3- if not already prefixed and doesn't start with COR-
+    if [[ ! "$new_branch" =~ ^sprint3- && ! "$new_branch" =~ ^COR- ]]; then
+        new_branch="${new_branch}"
+    fi
 
     # Create and checkout the new branch
-    git checkout -b "$new_branch" "$base_branch"
+    git fetch origin "$base_branch"
+    git checkout -b "$new_branch" "origin/$base_branch"
     
     if [[ $? -eq 0 ]]; then
         echo "Branch '$new_branch' criada a partir de '$base_branch'"
@@ -182,7 +194,7 @@ function merge() {
         pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+") # Obtém o número da PR a partir da URL
         
         # Use full path to the script
-        webhook_response=$(go run ~/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
+        webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
         
         echo "$webhook_response"
     else
@@ -436,7 +448,7 @@ function display_help() {
     echo -e "    staging\n"
 }
 
-function cmd_menu() {
+function gem() {
     # Função para obter opções de commit
     get_commit_types() {
         cat <<EOF
@@ -560,4 +572,22 @@ EOF
     fi
 }
 
-alias cmds='cmd_menu'
+alias cmds='gem'
+
+
+#    ascii_art=$(cat <<'EOF'
+#  ______                              _      
+#  |  ____|                            | |     
+#  | |__    _ __ ___    ___  __ _  ___ | |__   
+#  |  __|  | '_ ` _ \  / __|/ _` |/ __|| '_ \  
+#  | |____ | | | | | || (__| (_| |\__ \| | | | 
+#  |______||_| |_| |_| \___|\__,_||___/|_| |_| 
+#   / ____|            (_)                     
+#  | |      ___   _ __  _  _ __    __ _   __ _ 
+#  | |     / _ \ | '__|| || '_ \  / _` | / _` |
+#  | |____| (_) || |   | || | | || (_| || (_| |
+#   \_____|\___/ |_|   |_||_| |_| \__, | \__,_|
+#                                  __/ |       
+#                                 |___/        
+# EOF
+# )

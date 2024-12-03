@@ -1,5 +1,6 @@
 # Caminho para a pasta de scripts
-SCRIPTS_DIR=~/scripts/sh
+# Colocar o negócio do brunow
+SCRIPTS_DIR=~/scripts_ubuntu/sh
 
 # Carregar todos os scripts da pasta
 if [ -d "$SCRIPTS_DIR" ]; then
