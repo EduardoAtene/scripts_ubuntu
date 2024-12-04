@@ -14,9 +14,10 @@ import (
 )
 
 type Config struct {
-	WebhookURL     string `json:"webhook_url"`
-	SlackUserID    string `json:"slack_user_id"`
-	GroupApprovers string `json:"group_approvers"`
+	WebhookURL        string `json:"webhook_url"`
+	WebhookComplement string `json:"webhook_complement"`
+	SlackUserID       string `json:"slack_user_id"`
+	GroupApprovers    string `json:"group_approvers"`
 }
 
 type SlackMessageBlock struct {
@@ -75,8 +76,8 @@ func sendSlackMessage(prURL string, prTitle string, prNumberPr string, config *C
 
 	messageText := fmt.Sprintf(
 		`:rocket: *PR Criada - %s - %s* 
-*🏷️ Título:* %s
-*👥 Aprovadores:* %s
+*Título:* %s
+*Aprovadores:* %s
 		`,
 		author, projectName, titleWithLink, groupApprovers,
 	)
@@ -106,7 +107,8 @@ func sendSlackMessage(prURL string, prTitle string, prNumberPr string, config *C
 		return fmt.Errorf("erro ao converter mensagem para JSON: %w", err)
 	}
 
-	resp, err := http.Post(config.WebhookURL, "application/json", bytes.NewBuffer(jsonData))
+	webhookComplete := config.WebhookURL + config.WebhookComplement
+	resp, err := http.Post(webhookComplete, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("erro ao enviar a mensagem para o Slack: %w", err)
 	}
