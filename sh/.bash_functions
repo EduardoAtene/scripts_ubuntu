@@ -332,7 +332,7 @@ function commit() {
 
     if [[ ${msg} == "" ]]; then
         echo ""
-        echo "[ERROR] Nenhuma mensagem de commit especificada"t Onfly!
+        echo "[ERROR] Nenhuma mensagem de commit especificada"
     fi 
 
     if [[ ${type} != "invalid" ]] && [[ {$msg} != "" ]]; then
@@ -479,13 +479,24 @@ EOF
         local cmd=$1
         case $cmd in
             "start")
-            base_branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf)
-            
-            if [[ -n "$base_branch" ]]; then
+                base_branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf)
+                
+                if [[ -z "$base_branch" ]]; then
+                    echo "[ERROR] Nenhuma branch base selecionada. Operação cancelada."
+                    return 1
+                fi
+
+                # Sempre solicitar o nome da nova branch
                 read -p "Nome da nova branch (exemplo: sprint3-feature-name): " branch_name
+                
+                # Validar se o nome da branch foi fornecido
+                if [[ -z "$branch_name" ]]; then
+                    echo "[ERROR] O nome da branch não pode ser vazio."
+                    return 1
+                fi
+
                 echo "-f '$base_branch' -b '$branch_name'"
-            fi
-            ;;
+                ;;
             "commit")
                 selected_type=$(get_commit_types | fzf \
                     --preview='echo {} | cut -d: -f1 | xargs -I{} bash -c "\
