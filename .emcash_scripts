@@ -31,7 +31,6 @@ configure_slack_user_id() {
 initial_setup() {
     # Verificar se o arquivo já existe
     if [ -f "$CONFIG_FILE" ]; then
-        echo "Configuração já existente. Saindo..."
         return 0
     fi
 
