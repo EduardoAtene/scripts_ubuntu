@@ -18,7 +18,7 @@ fi
 # Função para instalar dependências
 install_dependencies() {
     echo "Instalando dependências..."
-    sudo apt update && sudo apt install -y gh fzf jq
+    sudo apt install -y gh fzf jq
 }
 
 # Função para configurar Slack User ID
@@ -73,7 +73,6 @@ initial_setup() {
             ;;
         *)
             echo "Erro inesperado: Time não reconhecido. Saindo..."
-            exit 1
             ;;
     esac
 
