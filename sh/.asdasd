@@ -1,0 +1,40 @@
+# function changeCollectionSqlFile() {
+#     local db_name=$1
+#     local sql_file=$2
+
+#     if [[ $db_name == "dbapp" ]]; then
+#         sed -i 's/utf8mb3_uca1400_ai_ci/utf8mb4_general_ci/g' $sql_file
+#         sed -i 's/utf8mb3/utf8mb4/g' $sql_file
+#         sed -i 's/utf8mb4_uca1400_ai_ci/utf8mb4_general_ci/g' $sql_file
+#     elif [[ $db_name == "dbsimulador" ]]; then
+#         sed -i 's/utf8mb4_uca1400_ai_ci/utf8_general_ci/g' $sql_file
+#         sed -i 's/utf8_uca1400_ai_ci/utf8_general_ci/g' $sql_file
+#         sed -i 's/utf8mb4/utf8/g' $sql_file
+#     fi
+# }
+
+# function executeDockerCommand() {
+#     local command=$1
+
+#     docker exec -i emcash_db mariadb -u root -padmin -e "$command" 2>/dev/null || { 
+#         echo "Permission denied. Trying with sudo"; 
+#         sudo docker exec -i emcash_db mariadb -u root -padmin -e "$command"; 
+#     }
+# }
+
+# function loadDb() {
+#     local db_name=$1
+#     local sql_file=$2
+
+#     changeCollectionSqlFile $db_name $sql_file
+
+#     echo "RUNING DROP DATABASE IF EXISTS"
+#     executeDockerCommand "DROP DATABASE IF EXISTS $db_name;"
+#     echo "RUNING CREATE SCHEMA"
+#     executeDockerCommand "CREATE SCHEMA $db_name COLLATE utf8_general_ci;"
+#     echo "MAKING LOAD FROM $db_name"
+#     docker exec -i emcash_db mariadb -u root -padmin -D $db_name < $sql_file 2>/dev/null || { 
+#         echo "Permission denied. Trying with sudo"; 
+#         sudo docker exec -i emcash_db mariadb -u root -padmin -D $db_name < $sql_file; 
+#     }
+# }

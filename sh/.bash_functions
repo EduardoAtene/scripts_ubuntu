@@ -114,67 +114,91 @@ function generate_pr_body() {
     git log --pretty=format:" - %s" origin/${branch}..HEAD
 }
 
-function merge() {
-    branch="sprint3-multiportal-feature"
-    identifier="COR-XXXX"
-    identifier_type="COR"
-    desc=""
-    error_message=""
+function mer() {
+    local branch=""
+    local identifier=""
+    local identifier_type=""
+    local desc=""
+    local pr_title=""
+    local pr_body=""
 
-    if [[ "$1" == "-h" ]]; then
-        display_help
+    # Seleção do branch de destino
+    branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf \
+        --preview='git log -n 5 --pretty=format:"%h %s" origin/{}' \
+        --preview-window=right:60% \
+        --height=70% \
+        --layout=reverse \
+        --info=hidden \
+        --header="Selecione a branch de destino")
+
+    branch=$(echo "$branch" | xargs)  # Remover espaços extras
+
+    if [[ -z "$branch" || "$branch" =~ [[:space:]] ]]; then
+        echo "[ERROR] O nome do branch é inválido: '$branch'"
         return 1
     fi
 
-    TEMP=`getopt --long -o "b:i:t:d:h" "$@"`
-    eval set -- "$TEMP"
+    # Seleção do tipo de identificador
+    identifier_type=$(echo -e "COR\nIMP\nConflitos\nMigration" | fzf \
+        --preview='case {} in 
+            COR) echo "Correção de Requisito - Obrigatório número" ;;
+            IMP) echo "Impedimento - Obrigatório número" ;;
+            Conflitos) echo "Resolução de Conflitos - Opcional número" ;;
+            Migration) echo "Migration - Opcional número" ;;
+        esac' \
+        --preview-window=right:60% \
+        --height=50% \
+        --layout=reverse \
+        --info=hidden \
+        --header="Selecione o tipo de identificador")
 
-    while true ; do
-        case "$1" in
-            -b )
-                branch=$2
-                shift 2
-            ;;
-            -i )
-                identifier=$2
-                shift 2
-            ;;
-            -t )
-                identifier_type=$2
-                shift 2
-            ;;
-            -d )
-                desc=$2
-                shift 2  
-            ;;
-            -h )
-                display_help
-                return 1
-            ;;
-            *)
-                break
-            ;;
-        esac
-    done;
-
-    # Validate identifier and type
-    if [[ "$identifier_type" == "COR" && ! "$identifier" =~ ^COR-([0-9]+(-[0-9]+)*)$ ]]; then
-        error_message+="[ERROR] O número do COR (COR-XXXX) é obrigatório e deve ser numérico\n"
-    elif [[ "$identifier_type" == "IMP" && ! "$identifier" =~ ^IMP-([0-9]+(-[0-9]+)*)$ ]]; then
-        error_message+="[ERROR] O número do IMPEDIMENTO (IMP-XXXX) é obrigatório e deve ser numérico\n"
-    elif [[ "$identifier_type" == "CONFLITS" && "$identifier" != "" ]]; then
-        error_message+="[ERROR] Para CONFLITS não deve ser fornecido número\n"
-    fi
-
-    if [[ $desc == "" ]]; then 
-        error_message+="[ERROR] Nenhuma descrição informada\n"
-    fi 
-
-    if [[ -n $error_message ]]; then
-        echo -e "$error_message"
+    if [[ -z "$identifier_type" ]]; then
+        echo "[ERROR] Nenhum tipo de identificador selecionado."
         return 1
     fi
 
+    # Entrada do número do identificador
+    case "$identifier_type" in
+        COR|IMP)
+            while true; do
+                read -p "Digite o número do ${identifier_type} (ex: 1234, obrigatório): " identifier
+                if [[ "$identifier" =~ ^[0-9]+$ ]]; then
+                    break
+                else
+                    echo "[ERROR] Número inválido. Digite apenas números."
+                fi
+            done
+            ;;
+        Conflitos|Migration)
+            read -p "Digite o número opcional (ou deixe em branco): " identifier
+            ;;
+    esac
+
+    # Entrada da descrição
+    while true; do
+        read -p "Descrição da Pull Request: " desc
+        if [[ -n "$desc" ]]; then
+            break
+        else
+            echo "[ERROR] A descrição não pode ser vazia."
+        fi
+    done
+
+    # Construir título da PR
+    if [[ -n "$identifier" ]]; then
+        pr_title="[${identifier_type}-${identifier}] ${desc}"
+    else
+        pr_title="[${identifier_type}] ${desc}"
+    fi
+
+    # Garantir commits no branch atual
+    git fetch origin "${branch}"
+    if ! git log "${branch}..HEAD" --oneline | grep .; then
+        echo "[ERROR] Não há commits entre ${branch} e o branch atual."
+        return 1
+    fi
+
+    # Fazer push para o branch remoto
     echo "Executando: git push origin HEAD"
     git push origin HEAD
     if [[ $? -ne 0 ]]; then
@@ -182,18 +206,130 @@ function merge() {
         return 1
     fi
 
+    # Gerar corpo da PR
+    pr_body="Commits: \n \n $(git log --oneline "${branch}..HEAD" | sed 's/^/- /')"
+
+    # Criar PR
+    # echo "Executando: gh pr create --base ${branch} --title '${pr_title}' --body '${pr_body}'"
+    pr_url=$(gh pr create --base "${branch}" --title "${pr_title}" --body "${pr_body}")
+    if [[ $? -eq 0 ]]; then
+        echo "Pull Request criada com sucesso: ${pr_url}"
+        
+        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+")
+        
+        # Send Slack notification
+        webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
+        
+        echo "$webhook_response"
+    else
+        echo "[ERROR] Não foi possível criar a Pull Request."
+    fi
+}
+
+
+function merge() {
+    # Default values
+    local branch="sprint3-multiportal-feature"
+    local identifier=""
+    local identifier_type=""
+    local desc=""
+    local error_message=""
+
+    # Parse arguments
+    TEMP=$(getopt -o "b:i:n:d:h" --long "branch:,type:,number:,description:,help" -n 'merge' -- "$@")
+    
+    if [ $? != 0 ] ; then echo "Terminating..." >&2 ; return 1 ; fi
+    
+    eval set -- "$TEMP"
+    
+    while true ; do
+        case "$1" in
+            -b|--branch)
+                branch="$2"
+                shift 2
+                ;;
+            -i|--type)
+                identifier_type="$2"
+                shift 2
+                ;;
+            -n|--number)
+                identifier="$2"
+                shift 2
+                ;;
+            -d|--description)
+                desc="$2"
+                shift 2
+                ;;
+            -h|--help)
+                display_help
+                return 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                echo "Erro interno"
+                return 1
+                ;;
+        esac
+    done
+
+    # Validation logic
+    if [[ "$identifier_type" == "COR" || "$identifier_type" == "IMP" ]]; then
+        if [[ ! "$identifier" =~ ^[0-9]+$ ]]; then
+            error_message+="[ERROR] O número do ${identifier_type} é obrigatório e deve ser numérico\n"
+        fi
+    elif [[ "$identifier_type" == "Conflitos" || "$identifier_type" == "Migration" ]]; then
+        # These types can have an optional number
+        if [[ -n "$identifier" && ! "$identifier" =~ ^[0-9]+$ ]]; then
+            error_message+="[ERROR] O número deve ser numérico\n"
+        fi
+    fi
+
+    # Mandatory description
+    if [[ $desc == "" ]]; then 
+        error_message+="[ERROR] Nenhuma descrição informada\n"
+    fi 
+
+    # Check if all required parameters are provided
+    if [[ -z "$identifier_type" ]]; then
+        error_message+="[ERROR] Tipo de identificador não informado\n"
+    fi
+
+    if [[ -n $error_message ]]; then
+        echo -e "$error_message"
+        return 1
+    fi
+
+    # Construct PR title based on type
+    if [[ -n "$identifier" ]]; then
+        pr_title="[${identifier_type}-${identifier}] ${desc}"
+    else
+        pr_title="[${identifier_type}] ${desc}"
+    fi
+
+    # Push current branch
+    echo "Executando: git push origin HEAD"
+    git push origin HEAD
+    if [[ $? -ne 0 ]]; then
+        echo "[ERROR] Não foi possível fazer o push para a branch."
+        return 1
+    fi
+
+    # Generate PR body
     pr_body=$(generate_pr_body)
 
-    echo "Executando: gh pr create --base ${branch} --title [${identifier_type}-${identifier}] ${desc} --body ${pr_body}"
-    pr_url=$(gh pr create --base "${branch}" --title "[${identifier_type}-${identifier}] ${desc}" --body "${pr_body}")
+    # Create PR
+    echo "Executando: gh pr create --base ${branch} --title '${pr_title}' --body '${pr_body}'"
+    pr_url=$(gh pr create --base "${branch}" --title "${pr_title}" --body "${pr_body}")
     
     if [[ $? -eq 0 ]]; then
         echo "Pull Request criada com sucesso: ${pr_url}"
         
-        pr_title="[${identifier_type}-${identifier}] ${desc}"
-        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+") # Obtém o número da PR a partir da URL
+        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+")
         
-        # Use full path to the script
+        # Send Slack notification
         webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
         
         echo "$webhook_response"
@@ -583,144 +719,6 @@ EOF
     fi
 }
 
-function mergee() {
-    # Default values
-    branch="sprint3-multiportal-feature"
-    identifier=""
-    identifier_type=""
-    desc=""
-    error_message=""
-    interactive_mode=false
-
-    # Parse arguments
-    TEMP=$(getopt -o "b:i:t:d:hi" --long "branch:,identifier:,type:,description:,help,interactive" -n 'merge' -- "$@")
-    
-    if [ $? != 0 ] ; then echo "Terminating..." >&2 ; return 1 ; fi
-    
-    eval set -- "$TEMP"
-    
-    while true ; do
-        case "$1" in
-            -b|--branch)
-                branch="$2"
-                shift 2
-                ;;
-            -i|--identifier)
-                identifier="$2"
-                shift 2
-                ;;
-            -t|--type)
-                identifier_type="$2"
-                shift 2
-                ;;
-            -d|--description)
-                desc="$2"
-                shift 2
-                ;;
-            -h|--help)
-                display_help
-                return 0
-                ;;
-            -i|--interactive)
-                interactive_mode=true
-                shift
-                ;;
-            --)
-                shift
-                break
-                ;;
-            *)
-                echo "Erro interno"
-                return 1
-                ;;
-        esac
-    done
-
-    # Interactive mode selection
-    if [[ "$interactive_mode" == true || -z "$branch" || -z "$identifier_type" || -z "$identifier" || -z "$desc" ]]; then
-        # Select branch
-        branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf \
-            --preview='git log -n 5 --pretty=format:"%h %s" origin/{}' \
-            --preview-window=right:60% \
-            --height=70% \
-            --layout=reverse \
-            --info=hidden \
-            --header="Selecione a branch de destino")
-
-        # Select identifier type
-        identifier_type=$(echo -e "COR\nIMP\nCONFLITS" | fzf \
-            --preview='case {} in 
-                COR) echo "Correção de Requisito" ;;
-                IMP) echo "Impedimento" ;;
-                CONFLITS) echo "Resolução de Conflitos" ;;
-            esac' \
-            --preview-window=right:60% \
-            --height=50% \
-            --layout=reverse \
-            --info=hidden \
-            --header="Selecione o tipo de identificador")
-
-        # Input identifier based on type
-        case "$identifier_type" in
-            COR|IMP)
-                read -p "Digite o número do ${identifier_type} (ex: ${identifier_type}-1234): " identifier
-                ;;
-            CONFLITS)
-                identifier="" # No identifier for CONFLITS
-                ;;
-        esac
-
-        # Input description
-        read -p "Descrição da Pull Request: " desc
-    fi
-
-    # Validate identifier and type
-    if [[ "$identifier_type" == "COR" && ! "$identifier" =~ ^COR-([0-9]+(-[0-9]+)*)$ ]]; then
-        error_message+="[ERROR] O número do COR (COR-XXXX) é obrigatório e deve ser numérico\n"
-    elif [[ "$identifier_type" == "IMP" && ! "$identifier" =~ ^IMP-([0-9]+(-[0-9]+)*)$ ]]; then
-        error_message+="[ERROR] O número do IMPEDIMENTO (IMP-XXXX) é obrigatório e deve ser numérico\n"
-    elif [[ "$identifier_type" == "CONFLITS" && "$identifier" != "" ]]; then
-        error_message+="[ERROR] Para CONFLITS não deve ser fornecido número\n"
-    fi
-
-    if [[ $desc == "" ]]; then 
-        error_message+="[ERROR] Nenhuma descrição informada\n"
-    fi 
-
-    if [[ -n $error_message ]]; then
-        echo -e "$error_message"
-        return 1
-    fi
-
-    # Push current branch
-    echo "Executando: git push origin HEAD"
-    git push origin HEAD
-    if [[ $? -ne 0 ]]; then
-        echo "[ERROR] Não foi possível fazer o push para a branch."
-        return 1
-    fi
-
-    # Generate PR body
-    pr_body=$(generate_pr_body)
-
-    # Create PR
-    echo "Executando: gh pr create --base ${branch} --title [${identifier_type}-${identifier}] ${desc} --body ${pr_body}"
-    pr_url=$(gh pr create --base "${branch}" --title "[${identifier_type}-${identifier}] ${desc}" --body "${pr_body}")
-    
-    if [[ $? -eq 0 ]]; then
-        echo "Pull Request criada com sucesso: ${pr_url}"
-        
-        pr_title="[${identifier_type}-${identifier}] ${desc}"
-        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+")
-        
-        # Send Slack notification
-        webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
-        
-        echo "$webhook_response"
-    else
-        echo "[ERROR] Não foi possível criar a Pull Request."
-    fi
-}
 
 alias cmds='gem'
 
@@ -741,3 +739,143 @@ alias cmds='gem'
 #                                 |___/        
 # EOF
 # )
+
+
+# function mergee() {
+#     # Default values
+#     branch="sprint3-multiportal-feature"
+#     identifier=""
+#     identifier_type=""
+#     desc=""
+#     error_message=""
+#     interactive_mode=false
+
+#     # Parse arguments
+#     TEMP=$(getopt -o "b:i:t:d:hi" --long "branch:,identifier:,type:,description:,help,interactive" -n 'merge' -- "$@")
+    
+#     if [ $? != 0 ] ; then echo "Terminating..." >&2 ; return 1 ; fi
+    
+#     eval set -- "$TEMP"
+    
+#     while true ; do
+#         case "$1" in
+#             -b|--branch)
+#                 branch="$2"
+#                 shift 2
+#                 ;;
+#             -i|--identifier)
+#                 identifier="$2"
+#                 shift 2
+#                 ;;
+#             -t|--type)
+#                 identifier_type="$2"
+#                 shift 2
+#                 ;;
+#             -d|--description)
+#                 desc="$2"
+#                 shift 2
+#                 ;;
+#             -h|--help)
+#                 display_help
+#                 return 0
+#                 ;;
+#             -i|--interactive)
+#                 interactive_mode=true
+#                 shift
+#                 ;;
+#             --)
+#                 shift
+#                 break
+#                 ;;
+#             *)
+#                 echo "Erro interno"
+#                 return 1
+#                 ;;
+#         esac
+#     done
+
+#     # Interactive mode selection
+#     if [[ "$interactive_mode" == true || -z "$branch" || -z "$identifier_type" || -z "$identifier" || -z "$desc" ]]; then
+#         # Select branch
+#         branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf \
+#             --preview='git log -n 5 --pretty=format:"%h %s" origin/{}' \
+#             --preview-window=right:60% \
+#             --height=70% \
+#             --layout=reverse \
+#             --info=hidden \
+#             --header="Selecione a branch de destino")
+
+#         # Select identifier type
+#         identifier_type=$(echo -e "COR\nIMP\nCONFLITS" | fzf \
+#             --preview='case {} in 
+#                 COR) echo "Correção de Requisito" ;;
+#                 IMP) echo "Impedimento" ;;
+#                 CONFLITS) echo "Resolução de Conflitos" ;;
+#             esac' \
+#             --preview-window=right:60% \
+#             --height=50% \
+#             --layout=reverse \
+#             --info=hidden \
+#             --header="Selecione o tipo de identificador")
+
+#         # Input identifier based on type
+#         case "$identifier_type" in
+#             COR|IMP)
+#                 read -p "Digite o número do ${identifier_type} (ex: ${identifier_type}-1234): " identifier
+#                 ;;
+#             CONFLITS)
+#                 identifier="" # No identifier for CONFLITS
+#                 ;;
+#         esac
+
+#         # Input description
+#         read -p "Descrição da Pull Request: " desc
+#     fi
+
+#     # Validate identifier and type
+#     if [[ "$identifier_type" == "COR" && ! "$identifier" =~ ^COR-([0-9]+(-[0-9]+)*)$ ]]; then
+#         error_message+="[ERROR] O número do COR (COR-XXXX) é obrigatório e deve ser numérico\n"
+#     elif [[ "$identifier_type" == "IMP" && ! "$identifier" =~ ^IMP-([0-9]+(-[0-9]+)*)$ ]]; then
+#         error_message+="[ERROR] O número do IMPEDIMENTO (IMP-XXXX) é obrigatório e deve ser numérico\n"
+#     elif [[ "$identifier_type" == "CONFLITS" && "$identifier" != "" ]]; then
+#         error_message+="[ERROR] Para CONFLITS não deve ser fornecido número\n"
+#     fi
+
+#     if [[ $desc == "" ]]; then 
+#         error_message+="[ERROR] Nenhuma descrição informada\n"
+#     fi 
+
+#     if [[ -n $error_message ]]; then
+#         echo -e "$error_message"
+#         return 1
+#     fi
+
+#     # Push current branch
+#     echo "Executando: git push origin HEAD"
+#     git push origin HEAD
+#     if [[ $? -ne 0 ]]; then
+#         echo "[ERROR] Não foi possível fazer o push para a branch."
+#         return 1
+#     fi
+
+#     # Generate PR body
+#     pr_body=$(generate_pr_body)
+
+#     # Create PR
+#     echo "Executando: gh pr create --base ${branch} --title [${identifier_type}-${identifier}] ${desc} --body ${pr_body}"
+#     pr_url=$(gh pr create --base "${branch}" --title "[${identifier_type}-${identifier}] ${desc}" --body "${pr_body}")
+    
+#     if [[ $? -eq 0 ]]; then
+#         echo "Pull Request criada com sucesso: ${pr_url}"
+        
+#         pr_title="[${identifier_type}-${identifier}] ${desc}"
+#         pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+")
+        
+#         # Send Slack notification
+#         webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
+        
+#         echo "$webhook_response"
+#     else
+#         echo "[ERROR] Não foi possível criar a Pull Request."
+#     fi
+# }

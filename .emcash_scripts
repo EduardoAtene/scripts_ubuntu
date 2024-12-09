@@ -1,6 +1,8 @@
+#!/bin/bash
+
 # Caminho para a pasta de scripts
-# Colocar o negócio do brunow
 SCRIPTS_DIR=~/scripts_ubuntu/sh
+CONFIG_FILE=~/scripts_ubuntu/env/config.json
 
 # Carregar todos os scripts da pasta
 if [ -d "$SCRIPTS_DIR" ]; then
@@ -12,3 +14,103 @@ if [ -d "$SCRIPTS_DIR" ]; then
 else
     echo "Diretório de scripts não encontrado: $SCRIPTS_DIR"
 fi
+
+# Função para instalar dependências
+install_dependencies() {
+    echo "Instalando dependências..."
+    sudo apt update && sudo apt install -y gh fzf jq
+}
+
+# Função para configurar Slack User ID
+configure_slack_user_id() {
+    read -p "Digite seu Slack User ID: " slack_user_id
+    echo "$slack_user_id"
+}
+
+# Função para configuração inicial (combinei select_team e create_config aqui)
+initial_setup() {
+    # Verificar se o arquivo já existe
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "Configuração já existente. Saindo..."
+        return 0
+    fi
+
+    echo "Iniciando configuração inicial do ambiente..."
+
+    # Instalar dependências
+    install_dependencies
+
+    # Selecionar time usando fzf com base em números e criar a configuração
+    echo "Selecione seu time:"
+    selected_team=$(echo -e "1) Coringa_BackEnd\n2) Coringa_FrontEnd\n3) CL\n4) S&P" | fzf --prompt="Escolha o número do time: " | cut -d')' -f1 | tr -d ' ')
+
+    # Verificar se o time foi selecionado corretamente
+    if [[ -z "$selected_team" ]]; then
+        echo "Nenhum time selecionado. Saindo..."
+        exit 1
+    fi
+
+    # Definir as configurações do time com base no time selecionado
+    case "$selected_team" in
+        "1")
+            webhook_complement="TP8NA9HB7/B083MFM4XGA/4GTvxR7jCIgozjRc9j7r6ND8"
+            group_approvers="S0688TA59K4"
+            group_mergers="S0688QLF483"
+            ;;
+        "2")
+            webhook_complement="TP8NA9HB7/FRONTEND_WEBHOOK/XXXX"
+            group_approvers="FRONTEND_APPROVERS"
+            group_mergers="FRONTEND_MERGERS"
+            ;;
+        "3")
+            webhook_complement="TP8NA9HB7/CL_WEBHOOK/XXXX"
+            group_approvers="CL_APPROVERS"
+            group_mergers="CL_MERGERS"
+            ;;
+        "4")
+            webhook_complement="TP8NA9HB7/SP_WEBHOOK/XXXX"
+            group_approvers="SP_APPROVERS"
+            group_mergers="SP_MERGERS"
+            ;;
+        *)
+            echo "Erro inesperado: Time não reconhecido. Saindo..."
+            exit 1
+            ;;
+    esac
+
+    # Configurar Slack User ID
+    slack_user_id=$(configure_slack_user_id)
+
+    # Criar diretório se não existir
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+
+    # Criar JSON e salvar no arquivo
+    echo "{
+        \"webhook_url\": \"https://hooks.slack.com/services/\",
+        \"webhook_complement\": \"$webhook_complement\",
+        \"slack_user_id\": \"$slack_user_id\",
+        \"group_approvers\": \"$group_approvers\",
+        \"group_mergers\": \"$group_mergers\"
+    }" > "$CONFIG_FILE"
+
+    if [ $? -eq 0 ]; then
+        echo "Configuração salva em $CONFIG_FILE"
+    else
+        echo "Erro ao salvar configuração em $CONFIG_FILE"
+        exit 1
+    fi
+
+    echo "Configuração inicial concluída com sucesso!"
+}
+
+# Execução com suporte a flags
+case "$1" in
+    --configure)
+        echo "Configurando novamente..."
+        rm -f "$CONFIG_FILE"
+        initial_setup
+        ;;
+    *)
+        initial_setup
+        ;;
+esac
