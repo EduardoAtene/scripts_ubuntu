@@ -1,0 +1,26 @@
+help_gem() {
+    declare -A help_texts
+
+    help_texts=(
+        ["Start"]="start:\nInicia uma nova demanda criando uma branch a partir de uma branch base.\nEste comando permite que você crie uma nova branch de desenvolvimento, solicitando a escolha da branch base e o nome da nova branch a ser desenvolvida.\n\nParâmetros:\n  -b : Nome da nova branch\n  -f : Branch base a partir da qual a nova branch será criada (padrão: sprint3-multiportal-feature)\n  -i : Modo interativo para selecionar a branch base\n\nQuando o modo interativo for ativado ou a branch base não for especificada, você será solicitado a escolher uma branch base a partir de uma lista de branches disponíveis. Após a escolha da branch base, será solicitado o nome da nova branch de desenvolvimento.\n\nExemplo de uso:\n  start -b nova-branch -f sprint3-branch\n  start -i"
+        ["Commit"]="commit:\nGera um commit com um tipo específico, usando um emoji correspondente ao tipo de mudança.\nParâmetros:\n  -t : Tipo de commit (bug, feat, fix, etc.)\n  -m : Mensagem detalhada do commit"
+        ["Merge"]="mer:\nRealiza o push da branch atual para o repositório remoto e cria uma Pull Request (PR) no GitHub.\nParâmetros:\n  -b : Define a branch de destino (padrão: sprint3-multiportal-feature)\n  -o : Código da COR, usado como identificador no título da PR\n  -d : Descrição detalhada da PR"
+        ["Up"]="up:\nAtualiza o corpo de uma PR existente, fazendo push da branch atual e editando a PR no GitHub.\nParâmetros:\n  -b : Define a branch de destino (padrão: sprint3-multiportal-feature)"
+        ["Limpar Branchs"]="Limpar Branchs:\nLimpa branches antigas ou não utilizadas no repositório.\nExemplo de uso: Limpar Branchs"
+        ["Notificação PR Slack"]="Notificação PR Slack:\nEnvia notificações sobre Pull Requests para o Slack.\nExemplo de uso: Notificação PR Slack"
+        ["Atualizar Script"]="Atualizar Script:\nRealiza o pull das alterações mais recentes do repositório onde estão localizados os scripts e recarrega o arquivo de configuração `~/.bashrc`.\nEsse processo assegura que as atualizações de script sejam aplicadas na sua máquina e que variáveis de ambiente ou funções recém-adicionadas sejam carregadas."
+        ["Help"]="Help:\nFornece ajuda sobre os comandos disponíveis, detalhando o que cada um faz e seus parâmetros.\nEste comando é útil quando você deseja obter uma descrição rápida de como usar as funções do sistema."
+    )
+
+    if [[ -n "$1" ]]; then
+        # Exibe o texto específico do comando
+        echo -e "${help_texts[$1]}"
+    else
+        # Exibe todos os textos de ajuda disponíveis
+        for cmd in "${!help_texts[@]}"; do
+            echo -e "====================="
+            echo -e "${help_texts[$cmd]}"
+            echo -e "====================="
+        done
+    fi
+}

@@ -1,0 +1,22 @@
+{
+    "Coringa_BackEnd": {
+        "username": "Alerquina",
+        "icon_emoji": ":alerquina-prs:",
+        "message_format": ":rocket: *PR Criada* - %s - *%s*\n*Título:* %s\n*Aprovadores:* %s"
+    },
+    "Coringa_FrontEnd": {
+        "username": "Doguinho Fronteender",
+        "icon_emoji": ":doge:",
+        "message_format": ":rocket: *PR Criada* - %s - *%s*\n*Título:* %s\n*Aprovadores:* %s"
+    },
+    "CL": {
+        "username": "CL PR Bot",
+        "icon_emoji": ":dog2:",
+        "message_format": ":rocket: *PR Criada* - %s - *%s*\n*Título:* %s\n*Aprovadores:* %s"
+    },
+    "S&P": {
+        "username": "S&P PR Bot",
+        "icon_emoji": ":dog2:",
+        "message_format": ":rocket: *PR Criada* - %s - *%s*\n*Título:* %s\n*Aprovadores:* %s"
+    }
+}

@@ -1,0 +1,108 @@
+
+function commit() {
+    type="invalid"
+    emoji=""
+    msg=""
+
+    TEMP=`getopt --long -o "t:m:h" "$@"`
+    eval set -- "$TEMP"
+    
+    while true ; do
+        case "$1" in
+            -t )
+                type=$2
+                shift 2
+            ;;
+            -m )
+                msg=$2
+                shift 2
+            ;;
+            *)
+                break
+            ;;
+        esac
+    done;
+
+    if [[ ${type} == "feat" ]]; then
+        emoji=✨
+    elif [[ ${type} == "fix" ]]; then 
+        emoji=🔧
+    elif [[ ${type} == "bug" ]]; then 
+        emoji=🪲
+    elif [[ ${type} == "refactor" ]]; then
+        emoji=🔃
+    elif [[ ${type} == "build" ]]; then
+        emoji=🛠
+    elif [[ ${type} == "comment" ]]; then
+        emoji=💡
+    elif [[ ${type} == "delete" ]]; then
+        emoji=❌
+    elif [[ ${type} == "dependency" ]]; then
+        emoji=📦
+    elif [[ ${type} == "deploy" ]]; then
+        emoji=🚀
+    elif [[ ${type} == "docs" ]]; then
+        emoji=📄
+    elif [[ ${type} == "downgrade" ]]; then
+        emoji=🔽
+    elif [[ ${type} == "rename" ]]; then
+        emoji=🔤
+    elif [[ ${type} == "revert" ]]; then
+        emoji=💥
+    elif [[ ${type} == "review" ]]; then
+        emoji=👌
+    elif [[ ${type} == "security" ]]; then
+        emoji=🔒
+    elif [[ ${type} == "style" ]]; then
+        emoji=💄
+    elif [[ ${type} == "test" ]]; then 
+        emoji=🧪
+    elif [[ ${type} == "upgrade" ]]; then
+        emoji=🔼
+    elif [[ ${type} == "wip" ]]; then
+        emoji=🚧
+    fi
+
+    if [[ ${type} == "invalid" ]]; then
+        echo ""
+        echo "[ERROR] Nenhum tipo de commit especificado"
+    fi 
+
+    if [[ ${msg} == "" ]]; then
+        echo ""
+        echo "[ERROR] Nenhuma mensagem de commit especificada"
+    fi 
+
+    if [[ ${type} != "invalid" ]] && [[ {$msg} != "" ]]; then
+        user=$(git config user.name)
+        command="git commit -m '${emoji} ${type^}: ${msg}'"
+        echo "${command}"
+        eval $command
+    else  
+        echo ""
+        echo -e "-m \t para especificar a mensagem do commit"
+        echo -e "-t \t para especificar o tipo de commit" 
+        echo ""
+        echo -e "Tipos de commit disponíveis: \n"
+        
+        echo -e "🪲 bug \t\t Para commitar uma correção de bug" 
+        echo -e "🔨 build \t Para commitar uma alteração durante build da aplicação" 
+        echo -e "💡 comment \t Para commitar um comentário de código"
+        echo -e "❌ delete \t Para commitar uma remoção de arquivo"
+        echo -e "🚀 deploy \t Para commitar uma alteração no deploy" 
+        echo -e "📦 dependency \t Para commitar a instalação de um novo pacote"
+        echo -e "📄 docs \t Para commitar uma alteração na documentação"
+        echo -e "🔽 downgrade \t Para commitar um rollback de versão"
+        echo -e "✨ feat \t Para commitar uma nova funcionalidade"
+        echo -e "🔧 fix \t\t Para commitar um ajuste em uma nova funcionalidade"  
+        echo -e "🔃 refactor \t Para commitar uma refatoração de código" 
+        echo -e "🔤 rename \t Para commitar uma mudança de nome ou namespace"
+        echo -e "💥 revert \t Para commitar um rollback de código" 
+        echo -e "👌 review \t Para commitar um ajuste de Code Review" 
+        echo -e "🔒 security \t Para commitar uma ajuste de segurança"
+        echo -e "💄 style \t Para commitar uma alteração de estilização"
+        echo -e "🧪 test \t Para commitar um teste automatizado"
+        echo -e "🔼 upgrade \t Para commitar uma atualização de versão"
+        echo -e "🚧 wip \t\t Para commitar uma mudança ainda em desenvolvimento/em andamento"
+    fi
+}

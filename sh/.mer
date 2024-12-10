@@ -1,0 +1,116 @@
+function mer() {
+    local branch=""
+    local identifier=""
+    local identifier_type=""
+    local desc=""
+    local pr_title=""
+    local pr_body=""
+
+    # Seleção do branch de destino
+    branch=$(git branch -r | grep -v '\->' | sed 's/origin\///' | fzf \
+        --preview='git log -n 5 --pretty=format:"%h %s" origin/{}' \
+        --preview-window=right:60% \
+        --height=70% \
+        --layout=reverse \
+        --info=hidden \
+        --header="Selecione a branch de destino")
+
+    branch=$(echo "$branch" | xargs)  # Remover espaços extras
+
+    if [[ -z "$branch" || "$branch" =~ [[:space:]] ]]; then
+        echo "[ERROR] O nome do branch é inválido: '$branch'"
+        return 1
+    fi
+
+    # Seleção do tipo de identificador
+    identifier_type=$(echo -e "COR\nIMP\nConflitos\nMigration" | fzf \
+        --preview='case {} in 
+            COR) echo "Correção de Requisito - Obrigatório número" ;;
+            IMP) echo "Impedimento - Obrigatório número" ;;
+            Conflitos) echo "Resolução de Conflitos - Opcional número" ;;
+            Migration) echo "Migration - Opcional número" ;;
+        esac' \
+        --preview-window=right:60% \
+        --height=50% \
+        --layout=reverse \
+        --info=hidden \
+        --header="Selecione o tipo de identificador")
+
+    if [[ -z "$identifier_type" ]]; then
+        echo "[ERROR] Nenhum tipo de identificador selecionado."
+        return 1
+    fi
+
+    # Entrada do número do identificador
+    case "$identifier_type" in
+        COR|IMP)
+            while true; do
+                read -p "Digite o número do ${identifier_type} (ex: 1234, obrigatório): " identifier
+                if [[ "$identifier" =~ ^[0-9]+$ ]]; then
+                    break
+                else
+                    echo "[ERROR] Número inválido. Digite apenas números."
+                fi
+            done
+            ;;
+        Conflitos|Migration)
+            read -p "Digite o número opcional (ou deixe em branco): " identifier
+            ;;
+    esac
+
+    # Entrada da descrição
+    while true; do
+        read -p "Descrição da Pull Request: " desc
+        if [[ -n "$desc" ]]; then
+            break
+        else
+            echo "[ERROR] A descrição não pode ser vazia."
+        fi
+    done
+
+    # Construir título da PR
+    if [[ -n "$identifier" ]]; then
+        pr_title="[${identifier_type}-${identifier}] ${desc}"
+    else
+        pr_title="[${identifier_type}] ${desc}"
+    fi
+
+    # Garantir commits no branch atual
+    git fetch origin "${branch}"
+    if ! git log "${branch}..HEAD" --oneline | grep .; then
+        echo "[ERROR] Não há commits entre ${branch} e o branch atual."
+        return 1
+    fi
+
+    # Fazer push para o branch remoto
+    echo "Executando: git push origin HEAD"
+    git push origin HEAD
+    if [[ $? -ne 0 ]]; then
+        echo "[ERROR] Não foi possível fazer o push para a branch."
+        return 1
+    fi
+
+    # Gerar corpo da PR
+    pr_body="Commits: \n \n $(git log --oneline "${branch}..HEAD" | sed 's/^/- /')"
+
+    # Criar PR
+    # echo "Executando: gh pr create --base ${branch} --title '${pr_title}' --body '${pr_body}'"
+    pr_url=$(gh pr create --base "${branch}" --title "${pr_title}" --body "${pr_body}")
+    if [[ $? -eq 0 ]]; then
+        echo "Pull Request criada com sucesso: ${pr_url}"
+        
+        pr_number=$(echo "$pr_url" | grep -oP "(?<=/pull/)\d+")
+        
+        # Send Slack notification
+        webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
+        
+        echo "$webhook_response"
+    else
+        echo "[ERROR] Não foi possível criar a Pull Request."
+    fi
+}
+
+function generate_pr_body() {
+    echo "Commits:"
+    git log --pretty=format:" - %s" origin/${branch}..HEAD
+}

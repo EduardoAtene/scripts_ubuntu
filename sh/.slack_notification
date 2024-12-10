@@ -1,0 +1,54 @@
+prnoti() {
+    pr_url=""
+    pr_title=""
+    pr_number=""
+
+    while getopts "l:t:n:" opt; do
+        case $opt in
+            l) pr_url="$OPTARG" ;;
+            t) pr_title="$OPTARG" ;;
+            n) pr_number="$OPTARG" ;;
+            *) echo -e "\e[31mQue opção tu colocou fi. revisa ai ( -l -t ou -n) .\e[0m" ; return 1 ;;
+        esac
+    done
+
+    if [ -z "$pr_url" ]; then
+        read -p "Só joga o link da PR aqui (Ctrl+V ou Ctrl+Shift+V para colar): " pr_url
+    fi
+
+    if [ -z "$pr_title" ]; then
+        read -p "Qual título da PR (Ctrl+V ou Ctrl+Shift+V para colar): " pr_title
+    fi
+
+    if [ -z "$pr_number" ]; then
+        read -p "Número da PR (Ctrl+V ou Ctrl+Shift+V para colar): " pr_number
+    fi
+
+    if [[ -z "$pr_url" || -z "$pr_title" || -z "$pr_number" ]]; then
+        echo -e "\e[31mError: All fields must be filled.\e[0m"
+        return 1
+    fi
+
+    echo -e "\n📢 Slack Notification Details:"
+    echo "PR URL: $pr_url"
+    echo "PR Title: $pr_title"
+    echo "PR Number: $pr_number"
+
+    # Confirma antes de enviar / só confirmando mesmo.
+    read -p "Podemos enviar a notificação no Slack? (y/n): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        webhook_response=$(go run ~/scripts_ubuntu/utils/send_slack_message.go "${pr_url}" "${pr_title}" "${pr_number}")
+        
+        if [ $? -eq 0 ]; then
+            echo -e "\e[32m✅ Notificação enviada com sucesso fi!\e[0m"
+            echo "Response: $webhook_response"
+        else
+            echo -e "\e[31m❌ Deu algum problema, não chama o Duds <3.\e[0m"
+        fi
+    fi
+
+    # Limpar, só para evitar problemas <3
+    pr_url=""
+    pr_title=""
+    pr_number=""
+}

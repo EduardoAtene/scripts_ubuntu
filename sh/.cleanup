@@ -1,0 +1,30 @@
+cleanupExit() {
+    echo -e "\n\e[31mExiting script...\e[0m" 
+    exit 1
+}
+
+
+cleanup() {
+    trap cleanupExit SIGINT  
+
+    # Get the current branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)  
+    echo -e "\e[33mUpdating local repository...\e[0m"
+    git fetch --prune 
+
+    echo -e "\n\e[33mChecking for local branches not in remote repository...\e[0m"  
+
+    local_branches=$(git branch --format='%(refname:short)' | grep -v "$current_branch")
+
+    while IFS= read -r branch; do
+        if [ "$branch" != "$current_branch" ]; then  
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+                echo -e "\n\e[33mRemoving local branch '$branch'...\e[0m"
+                git branch -D "$branch"
+            fi
+        fi
+    done <<< "$local_branches"
+    
+    echo -e "\n\e[32mLocal branch cleanup completed.\e[0m\n"
+}
+

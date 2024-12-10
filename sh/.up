@@ -1,0 +1,31 @@
+function up() {
+    branch="sprint3-multiportal-feature"
+    error_message=""
+
+    if [[ "$1" == "-h" ]]; then
+        display_help
+        return 1
+    fi
+
+    TEMP=`getopt --long -o "b:h" "$@"`
+    eval set -- "$TEMP"
+    
+    while true ; do
+        case "$1" in
+            -b )
+                branch=$2
+                shift 2
+            ;;
+            -h )
+                display_help
+                return 1
+            ;;
+            *)
+                break
+            ;;
+        esac
+    done;
+
+    echo "Executando: git push origin HEAD"
+    git push origin HEAD
+}

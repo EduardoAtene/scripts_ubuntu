@@ -1,0 +1,18 @@
+update_script() {
+    echo -e "\nAtualizando projeto do script..."
+
+    current_dir=$(pwd)
+    cd ~/scripts_ubuntu/ || { echo "Diretório não encontrado!"; return 1; }
+
+    if [[ "$1" == "-p" ]]; then
+        git pull || { echo "Falha ao fazer pull do repositório, se fudeu. Não chama o Duds <3 brincadeira."; return 1; }
+        echo -e "\nRepositório atualizado com sucesso!"
+    fi
+
+    # Recarrega o ~/.bashrc
+    source ~/.bashrc
+
+    echo -e "\nScript atualizado com sucesso!"
+
+    cd $current_dir  
+}

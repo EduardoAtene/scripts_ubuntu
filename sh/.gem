@@ -1,0 +1,115 @@
+export -f help_gem
+
+function gem() {
+
+    get_commit_types() {
+        cat <<EOF
+feat:✨ Nova funcionalidade
+fix:🔧 Ajuste em funcionalidade
+bug:🪲 Correção de bug
+refactor:🔃 Refatoração de código
+build:🛠 Alteração durante build
+comment:💡 Comentário de código
+delete:❌ Remoção de arquivo
+deploy:🚀 Alteração no deploy
+dependency:📦 Instalação de pacote
+docs:📄 Alteração na documentação
+downgrade:🔽 Rollback de versão
+rename:🔤 Mudança de nome
+revert:💥 Rollback de código
+review:👌 Ajuste de Code Review
+security:🔒 Ajuste de segurança
+style:💄 Alteração de estilização
+test:🧪 Teste automatizado
+upgrade:🔼 Atualização de versão
+wip:🚧 Mudança em desenvolvimentof
+EOF
+    }
+
+    selected_cmd=$(cat <<EOF | fzf --preview="help_gem \$selected_cmd | head -n 10" \
+        --preview-window=right:60% \
+        --height=50% \
+        --layout=reverse \
+        --info=hidden \
+        --header="Selecione um comando":
+Start
+Commit
+Merge
+Up
+Limpar Branchs
+Notificação PR Slack
+Atualizar Script
+Atualizar Bashrc
+Help
+EOF
+)
+
+    if [[ -n "$selected_cmd" ]]; then
+    
+        if [[ "$selected_cmd" == "Help" ]]; then
+            help_gem
+
+            return
+        fi
+
+        case $selected_cmd in
+            "Start Tarefa")
+                start
+                ;;
+            "Commit")
+                selected_commit_type=$(get_commit_types | fzf \
+                    --preview='echo {} | cut -d: -f1 | xargs -I{} bash -c "\
+                        case {} in \
+                            feat) echo \"Exemplo: Adição de funcionalidade de login\";; \
+                            fix) echo \"Exemplo: Correção de cálculo no frontend\";; \
+                            bug) echo \"Exemplo: Correção de um bug crítico no sistema\";; \
+                            refactor) echo \"Exemplo: Melhoria na estrutura do código sem mudar funcionalidade\";; \
+                            build) echo \"Exemplo: Ajustes na configuração de build\";; \
+                            comment) echo \"Exemplo: Comentários explicativos para código\";; \
+                            delete) echo \"Exemplo: Remoção de arquivos não usados\";; \
+                            deploy) echo \"Exemplo: Atualização do pipeline de deploy\";; \
+                            dependency) echo \"Exemplo: Adição de nova dependência ao projeto\";; \
+                            docs) echo \"Exemplo: Atualização de documentação do README\";; \
+                            downgrade) echo \"Exemplo: Reverter uma versão de dependência\";; \
+                            rename) echo \"Exemplo: Renomear arquivo ou variável\";; \
+                            revert) echo \"Exemplo: Reverter commit anterior\";; \
+                            review) echo \"Exemplo: Ajustes pós code review\";; \
+                            security) echo \"Exemplo: Correção de vulnerabilidade de segurança\";; \
+                            style) echo \"Exemplo: Ajustes de espaçamento ou estilo de código\";; \
+                            test) echo \"Exemplo: Adição de testes unitários\";; \
+                            upgrade) echo \"Exemplo: Atualização de dependência para nova versão\";; \
+                            wip) echo \"Exemplo: Trabalho em progresso para nova feature\";; \
+                            *) echo \"Sem exemplo disponível\";; \
+                        esac"' \
+                    --preview-window=right:60% \
+                    --height=70% \
+                    --layout=reverse \
+                    --info=hidden \
+                    --header="Selecione o tipo de commit e veja um exemplo" | cut -d: -f1)
+
+                if [[ -n "$selected_commit_type" ]]; then
+                    read -p "Mensagem do commit: " commit_msg
+                    git commit -t "$selected_commit_type" -m "$commit_msg"
+                fi
+                ;;
+            "Merge")
+                mer
+                ;;
+            "Up")
+                up
+                ;;
+            "Limpar Branchs")
+                cleanup
+                ;;
+            "Notificação PR Slack")
+                prnoti
+                ;;
+            "Atualizar Script")
+                update_script -p
+                ;;
+            "Atualizar Bashrc")
+                update_script
+                ;;
+        esac
+    fi
+}
