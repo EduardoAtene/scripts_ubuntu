@@ -5,6 +5,7 @@ function gem() {
 feat:✨ Nova funcionalidade
 fix:🔧 Ajuste em funcionalidade
 bug:🪲 Correção de bug
+hotfix:🐞 Correção de um hotfix
 refactor:🔃 Refatoração de código
 build:🛠 Alteração durante build
 comment:💡 Comentário de código
@@ -61,6 +62,7 @@ EOF
                             feat) echo \"Exemplo: Adição de funcionalidade de login\";; \
                             fix) echo \"Exemplo: Correção de cálculo no frontend\";; \
                             bug) echo \"Exemplo: Correção de um bug crítico no sistema\";; \
+                            hotfix) echo \"Exemplo: Correção de um hotfix urgente no sistema\";; \
                             refactor) echo \"Exemplo: Melhoria na estrutura do código sem mudar funcionalidade\";; \
                             build) echo \"Exemplo: Ajustes na configuração de build\";; \
                             comment) echo \"Exemplo: Comentários explicativos para código\";; \

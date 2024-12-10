@@ -29,6 +29,8 @@ function commit() {
         emoji=🔧
     elif [[ ${type} == "bug" ]]; then 
         emoji=🪲
+    elif [[ ${type} == "hotfix" ]]; then 
+        emoji=🐞
     elif [[ ${type} == "refactor" ]]; then
         emoji=🔃
     elif [[ ${type} == "build" ]]; then
@@ -86,6 +88,7 @@ function commit() {
         echo -e "Tipos de commit disponíveis: \n"
         
         echo -e "🪲 bug \t\t Para commitar uma correção de bug" 
+        echo -e "🐞 hotfix \t Para commitar um hotfix" 
         echo -e "🔨 build \t Para commitar uma alteração durante build da aplicação" 
         echo -e "💡 comment \t Para commitar um comentário de código"
         echo -e "❌ delete \t Para commitar uma remoção de arquivo"
