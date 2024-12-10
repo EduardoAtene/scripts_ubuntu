@@ -1,14 +1,14 @@
-package utils
+package main
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Config struct {
@@ -41,7 +41,7 @@ type TemplateConfig struct {
 }
 
 func loadConfig(filename string) (*Config, error) {
-	file, err := ioutil.ReadFile(filename)
+	file, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
@@ -70,7 +70,7 @@ func sendSlackMessage(payload []byte, webhookURL string) error {
 }
 
 func loadTemplates(filename string) (map[string]TemplateConfig, error) {
-	file, err := ioutil.ReadFile(filename)
+	file, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading templates file: %w", err)
 	}
@@ -87,7 +87,8 @@ func loadTemplates(filename string) (map[string]TemplateConfig, error) {
 func BuildSlackMessage(prURL, prTitle, prNumber string, config *Config) ([]byte, error) {
 	_, currentFilePath, _, _ := runtime.Caller(0)
 	currentDir := filepath.Dir(currentFilePath)
-	templatesPath := filepath.Join(currentDir, "../env/templates.json")
+
+	templatesPath := filepath.Join(currentDir, "", "templates.json")
 
 	templates, err := loadTemplates(templatesPath)
 	if err != nil {
@@ -102,8 +103,9 @@ func BuildSlackMessage(prURL, prTitle, prNumber string, config *Config) ([]byte,
 	author := fmt.Sprintf("<@%s>", config.SlackUserID)
 	groupApprovers := fmt.Sprintf("<!subteam^%s>", config.GroupApprovers)
 	titleWithLink := fmt.Sprintf("<%s|%s> #%s", prURL, prTitle, prNumber)
+	projectName := getProjectNameFromURL(prURL)
 
-	messageText := fmt.Sprintf(template.MessageFormat, author, config.Team, titleWithLink, groupApprovers)
+	messageText := fmt.Sprintf(template.MessageFormat, author, projectName, titleWithLink, groupApprovers)
 
 	message := SlackMessage{
 		Username:  template.Username,
@@ -137,7 +139,8 @@ func main() {
 
 	_, currentFilePath, _, _ := runtime.Caller(0)
 	currentDir := filepath.Dir(currentFilePath)
-	configPath := filepath.Join(currentDir, "../env/config.json")
+
+	configPath := filepath.Join(currentDir, "../env", "config.json")
 
 	config, err := loadConfig(configPath)
 	if err != nil {
@@ -159,4 +162,35 @@ func main() {
 	}
 
 	fmt.Println("Message sent successfully.")
+}
+
+func getProjectNameFromURL(url string) string {
+	switch {
+	case strings.Contains(url, "360-api"):
+		return "Portal 360°"
+	case strings.Contains(url, "wallet.em.cash"):
+		return "Wallet"
+	case strings.Contains(url, "controle.em.cash"):
+		return "Controle"
+	case strings.Contains(url, "360-canvas"):
+		return "Canvas/Portal 360"
+	case strings.Contains(url, "360-simulador"):
+		return "Simulador 360"
+	case strings.Contains(url, "parceiro.em.cash"):
+		return "Parceiro"
+	case strings.Contains(url, "wealthui"):
+		return "Wealthui"
+	case strings.Contains(url, "web-core"):
+		return "Web Core"
+	case strings.Contains(url, "360-proxy"):
+		return "Proxy"
+	case strings.Contains(url, "360-webkit"):
+		return "Webkit"
+	case strings.Contains(url, "go-core"):
+		return "Go Core"
+	case strings.Contains(url, "mass.em.cash"):
+		return "Mass"
+	default:
+		return ""
+	}
 }

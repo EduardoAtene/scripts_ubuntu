@@ -50,21 +50,25 @@ initial_setup() {
 
     case "$selected_team" in
         "1")
+            team="Coringa_BackEnd"
             webhook_complement="TP8NA9HB7/B083MFM4XGA/4GTvxR7jCIgozjRc9j7r6ND8"
             group_approvers="S0688TA59K4"
             group_mergers="S0688QLF483"
             ;;
         "2")
+            team="Coringa_FrontEnd"
             webhook_complement="TP8NA9HB7/B084DPXRXMJ/B8HChWG6ahdfmqa30kQCQUPa"
             group_approvers="S061YA0N7MZ"
             group_mergers="FRONTEND_MERGERS"
             ;;
         "3")
+            team="CL"
             webhook_complement="TP8NA9HB7/CL_WEBHOOK/XXXX"
             group_approvers="CL_APPROVERS"
             group_mergers="CL_MERGERS"
             ;;
         "4")
+            team="S&P"
             webhook_complement="TP8NA9HB7/SP_WEBHOOK/XXXX"
             group_approvers="SP_APPROVERS"
             group_mergers="SP_MERGERS"
