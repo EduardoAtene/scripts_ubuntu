@@ -23,12 +23,14 @@ function mer() {
     fi
 
     # Seleção do tipo de identificador
-    identifier_type=$(echo -e "COR\nIMP\nConflitos\nMigration" | fzf \
+    identifier_type=$(echo -e "COR\nIMP\nConflitos\nMigration\nRefresh\nMerge" | fzf \
         --preview='case {} in 
             COR) echo "Correção de Requisito - Obrigatório número" ;;
             IMP) echo "Impedimento - Obrigatório número" ;;
             Conflitos) echo "Resolução de Conflitos - Opcional número" ;;
             Migration) echo "Migration - Opcional número" ;;
+            Refresh) echo "Refresh - Opcional número" ;;
+            Merge) echo "Merge - Opcional número" ;;
         esac' \
         --preview-window=right:60% \
         --height=50% \
@@ -53,7 +55,7 @@ function mer() {
                 fi
             done
             ;;
-        Conflitos|Migration)
+        Conflitos|Migration|Refresh|Merge)
             read -p "Digite o número opcional (ou deixe em branco): " identifier
             ;;
     esac
@@ -76,11 +78,11 @@ function mer() {
     fi
 
     # Garantir commits no branch atual
-    git fetch origin "${branch}"
-    if ! git log "${branch}..HEAD" --oneline | grep .; then
-        echo "[ERROR] Não há commits entre ${branch} e o branch atual."
-        return 1
-    fi
+    # git fetch origin "${branch}"
+    # if ! git log "${branch}..HEAD" --oneline | grep .; then
+    #     echo "[ERROR] Não há commits entre ${branch} e o branch atual."
+    #     return 1
+    # fi
 
     # Fazer push para o branch remoto
     echo "Executando: git push origin HEAD"
@@ -90,8 +92,7 @@ function mer() {
         return 1
     fi
 
-    # Gerar corpo da PR
-    pr_body="Commits: \n \n $(git log --oneline "${branch}..HEAD" | sed 's/^/- /')"
+    pr_body=$(printf "Commits: \n%s" "$(git log --oneline "${branch}..HEAD" | sed 's/^/- /')")
 
     # Criar PR
     # echo "Executando: gh pr create --base ${branch} --title '${pr_title}' --body '${pr_body}'"

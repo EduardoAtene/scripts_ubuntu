@@ -89,7 +89,7 @@ EOF
 
                 if [[ -n "$selected_commit_type" ]]; then
                     read -p "Mensagem do commit: " commit_msg
-                    git commit -t "$selected_commit_type" -m "$commit_msg"
+                    commit -t $selected_commit_type -m "$commit_msg"
                 fi
                 ;;
             "Merge")
